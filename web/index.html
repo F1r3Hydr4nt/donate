@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>Offline Paper Wallets</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="page-head no-print">
+      <h1>Offline Paper Wallet Generator</h1>
+      <p class="lede">Keys and addresses for the CoinMarketCap top 17, grouped by shared key scheme.
+        Everything runs locally in this page; nothing is sent anywhere.</p>
+      <div id="network" class="status"></div>
+      <div id="selftest" class="status">Running self-test…</div>
+      <noscript><div class="status bad">JavaScript is required.</div></noscript>
+    </header>
+
+    <details class="no-print guide">
+      <summary>Safe use checklist</summary>
+      <ol>
+        <li>Check the zip's SHA-256 against <code>SHA256SUMS.txt</code> before copying it to the offline computer.</li>
+        <li>Unzip on a computer that is disconnected from every network. A freshly booted live USB (e.g. Tails) is best.</li>
+        <li>Open <code>index.html</code> directly from disk. The self-test must pass.</li>
+        <li>Print with a USB printer. Network printers and "print to PDF" can keep copies of the page.</li>
+        <li>Close the browser when done. Don't save the page or take screenshots.</li>
+        <li>Before storing real value, send a small amount, restore the wallet from the printed key, and spend it back.</li>
+        <li>Anyone who sees a private key or recovery phrase can take the funds. Store the paper like cash: laminated, hidden, and with a second copy somewhere safe.</li>
+      </ol>
+    </details>
+
+    <section class="controls no-print">
+      <fieldset>
+        <legend>Wallet groups</legend>
+        <div id="groups"></div>
+      </fieldset>
+      <div class="buttons">
+        <button id="generate" type="button" disabled>Generate new wallets</button>
+        <button id="print" type="button" disabled>Print</button>
+        <button id="clear" type="button" disabled>Clear</button>
+        <label class="toggle"><input id="blur" type="checkbox" checked> Blur private keys on screen (they print unblurred)</label>
+      </div>
+    </section>
+
+    <div id="wallets"></div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

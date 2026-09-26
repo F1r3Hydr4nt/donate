@@ -1,0 +1,37 @@
+{
+  "name": "donate",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "node --test --test-force-exit \"test/*.test.js\"",
+    "build": "node scripts/build.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@paulmillr/qr": "^0.3.0",
+    "@scure/base": "^2.4.0",
+    "@scure/bip39": "^2.4.0"
+  },
+  "devDependencies": {
+    "@emurgo/cardano-serialization-lib-nodejs": "^17.0.0",
+    "@solana/web3.js": "^1.99.0",
+    "@stellar/stellar-base": "^15.0.0",
+    "bchaddrjs": "^0.5.2",
+    "bitcoinjs-lib": "^7.0.2",
+    "bs58check": "^4.0.0",
+    "ecpair": "^3.0.2",
+    "esbuild": "^0.28.2",
+    "ethers": "^6.17.0",
+    "jsqr": "^1.4.0",
+    "monero-ts": "^0.11.16",
+    "ripple-keypairs": "^3.1.0",
+    "tiny-secp256k1": "^2.2.4",
+    "tronweb": "^6.5.1"
+  }
+}

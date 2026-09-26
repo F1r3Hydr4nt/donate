@@ -1,0 +1,29 @@
+# Offline paper wallet generator
+
+This single page makes printable paper wallets (keys, addresses and QR codes) for the CoinMarketCap top 17.
+The output is `dist/paper-wallet.zip`: unzip it on an offline computer and open `index.html`. You don't need a server or network.
+
+| Group | Coins | Secret you print |
+|---|---|---|
+| Bitcoin family (secp256k1, HASH160) | BTC (bc1q + 1…), BCH (CashAddr), DOGE, ZEC (t1…) | WIF (BTC/BCH/ZEC), WIF (DOGE), hex |
+| EVM + TRON (secp256k1, Keccak) | ETH, USDT, USDC, LINK, LEO (ERC-20), BNB (BSC), HYPE (HyperEVM), TRX | hex private key |
+| ed25519 | SOL, XLM | Solana base58 secret, Stellar `S…` seed |
+| XRP | XRP | `sEd…` family seed (ed25519) |
+| Cardano | ADA | 24-word BIP-39 phrase (CIP-1852 base address) |
+| Monero | XMR | 25-word seed + spend/view keys |
+
+Each group gets its own fresh key from `crypto.getRandomValues`.
+
+## Develop
+
+```
+npm install
+npm test        # node:test, cross-checked against reference libraries + headless Chrome e2e
+npm run build   # -> dist/paper-wallet/ and dist/paper-wallet.zip (+ .sha256)
+```
+
+These runtime dependencies are bundled into `app.js`: `@noble/curves`, `@noble/hashes`, `@scure/base`, `@scure/bip39`, `@paulmillr/qr`.
+The other dev dependencies (bitcoinjs-lib, ethers, tronweb, @solana/web3.js, stellar-base, ripple-keypairs,
+cardano-serialization-lib, monero-ts, jsqr) are only used by the tests, as independent sources of truth. They are never shipped.
+
+When the page loads it runs 18 known-answer checks plus an RNG sanity check. Generation stays disabled unless they all pass.
