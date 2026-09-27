@@ -6,6 +6,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import * as bitcoin from 'bitcoinjs-lib';
+import { ECPairFactory } from 'ecpair';
+import * as ecc from 'tiny-secp256k1';
+import bs58check from 'bs58check';
+import bchaddr from 'bchaddrjs';
+import { Wallet } from 'ethers';
+import { TronWeb } from 'tronweb';
+import { Keypair as SolKeypair } from '@solana/web3.js';
+import { Keypair as XlmKeypair } from '@stellar/stellar-base';
+import * as rippleKeypairs from 'ripple-keypairs';
+import CSL from '@emurgo/cardano-serialization-lib-nodejs';
+import moneroTs from 'monero-ts';
+import { base58 } from '@scure/base';
+import { mnemonicToEntropy } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english.js';
+
 import { build } from '../scripts/build.mjs';
 
 let out;
@@ -125,6 +141,71 @@ test('only public addresses get QR codes; secrets are plain, unhidden text for t
   assert.equal(secrets.filter((s) => /^S[A-Z2-7]{55}$/.test(s)).length, 1); // Stellar
   assert.equal(secrets.filter((s) => /^sEd[1-9A-HJ-NP-Za-km-z]{26,}$/.test(s)).length, 1); // XRP
   assert.equal(secrets.filter((s) => new RegExp(`^${B58}{86,88}$`).test(s)).length, 1); // Solana 64-byte
+});
+
+// Reads the page the way a person would: each wallet's printed secrets and
+// addresses, with chunked secrets joined and word lists joined by spaces.
+function printedWallets(dom) {
+  return [...dom.matchAll(/<section class="wallet">([\s\S]*?)<\/section>/g)].map(([, s]) => {
+    const items = [...s.matchAll(/<div class="item (public|secret)">([\s\S]*?)<\/div><\/div>/g)].map(([, kind, body]) => {
+      const words = body.match(/<ol class="words[^"]*">([\s\S]*?)<\/ol>/);
+      return {
+        kind,
+        label: textOf(body.match(/<div class="item-label">([\s\S]*?)<\/div>/)[1]),
+        value: words ? [...words[1].matchAll(/<li>([a-z]+)<\/li>/g)].map((w) => w[1]).join(' ')
+          : textOf(body.match(/<div class="value[^"]*">([\s\S]*?)(?:<\/div>|$)/)[1]),
+      };
+    });
+    const pick = (kind) => (re) => {
+      const hits = items.filter((i) => i.kind === kind && re.test(i.label));
+      assert.equal(hits.length, 1, `expected one ${kind} item matching ${re}`);
+      return hits[0].value;
+    };
+    return { pub: pick('public'), sec: pick('secret') };
+  });
+}
+
+const ECPair = ECPairFactory(ecc);
+const DOGE = {
+  messagePrefix: '\x19Dogecoin Signed Message:\n', bech32: 'doge',
+  bip32: { public: 0x02facafd, private: 0x02fac398 }, pubKeyHash: 0x1e, scriptHash: 0x16, wif: 0x9e,
+};
+
+test('every printed secret, re-imported with reference libs, gives the address printed beside it', e2e, async () => {
+  for (let run = 0; run < 3; run++) {
+    const [btc, evm, ed, xrp, ada, xmr] = printedWallets(dumpDom(harness(unzipped(), `oracle-${run}`)));
+
+    const pair = ECPair.fromWIF(btc.sec(/WIF \(BTC/));
+    const pubkey = Buffer.from(pair.publicKey);
+    assert.equal(Buffer.from(pair.privateKey).toString('hex'), btc.sec(/hex/));
+    assert.equal(bitcoin.payments.p2wpkh({ pubkey }).address, btc.pub(/SegWit/));
+    assert.equal(bitcoin.payments.p2pkh({ pubkey }).address, btc.pub(/legacy/));
+    assert.equal(bchaddr.toCashAddress(btc.pub(/legacy/)), btc.pub(/Cash/));
+    assert.equal(bs58check.encode(Buffer.concat([Buffer.from([0x1c, 0xb8]), bitcoin.crypto.hash160(pubkey)])), btc.pub(/Zcash/));
+    const doge = ECPair.fromWIF(btc.sec(/DOGE/), DOGE);
+    assert.equal(Buffer.from(doge.privateKey).toString('hex'), btc.sec(/hex/));
+    assert.equal(bitcoin.payments.p2pkh({ pubkey: Buffer.from(doge.publicKey), network: DOGE }).address, btc.pub(/Dogecoin/));
+
+    assert.equal(new Wallet('0x' + evm.sec(/hex/)).address, evm.pub(/EVM/));
+    assert.equal(TronWeb.address.fromPrivateKey(evm.sec(/hex/)), evm.pub(/TRON/));
+
+    // fromSecretKey also checks the embedded public half of the 64-byte key.
+    assert.equal(SolKeypair.fromSecretKey(base58.decode(ed.sec(/Solana/))).publicKey.toBase58(), ed.pub(/Solana/));
+    assert.equal(XlmKeypair.fromSecret(ed.sec(/Stellar/)).publicKey(), ed.pub(/Stellar/));
+
+    assert.equal(rippleKeypairs.deriveAddress(rippleKeypairs.deriveKeypair(xrp.sec(/seed/)).publicKey), xrp.pub(/XRP/));
+
+    const h = (n) => (n | 0x80000000) >>> 0;
+    const acct = CSL.Bip32PrivateKey.from_bip39_entropy(mnemonicToEntropy(ada.sec(/24-word/), wordlist), new Uint8Array())
+      .derive(h(1852)).derive(h(1815)).derive(h(0));
+    const cred = (role) => CSL.Credential.from_keyhash(acct.derive(role).derive(0).to_public().to_raw_key().hash());
+    assert.equal(CSL.BaseAddress.new(1, cred(0), cred(2)).to_address().to_bech32(), ada.pub(/Cardano/));
+
+    const restored = await moneroTs.createWalletKeys({ networkType: moneroTs.MoneroNetworkType.MAINNET, seed: xmr.sec(/mnemonic/) });
+    assert.equal(await restored.getPrimaryAddress(), xmr.pub(/Monero/));
+    assert.equal(await restored.getPrivateSpendKey(), xmr.sec(/spend/));
+    assert.equal(await restored.getPrivateViewKey(), xmr.sec(/view/));
+  }
 });
 
 for (const [size, box] of [['A4', /\/MediaBox \[0 0 59[45][.\d]* 84[12][.\d]*\]/], ['letter', /\/MediaBox \[0 0 612 792\]/]]) {
