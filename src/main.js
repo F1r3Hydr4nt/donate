@@ -56,8 +56,10 @@ function itemNode(item, kind) {
   );
 }
 
-function walletNode(w, createdAt) {
-  return el('section', { class: 'wallet' },
+// A group shows up once in each half; the repeated header (and data-group) ties
+// its private keys back to its addresses.
+function walletNode(w, createdAt, ...body) {
+  return el('section', { class: 'wallet', 'data-group': w.id },
     el('header', { class: 'wallet-head' },
       el('div', {},
         el('h2', {}, w.title),
@@ -68,12 +70,28 @@ function walletNode(w, createdAt) {
         el('div', {}, `Created ${createdAt}`),
       ),
     ),
-    el('h3', { class: 'public-h' }, 'Public — share these to receive funds'),
-    el('div', { class: 'items' }, ...w.addresses.map((a) => itemNode(a, 'public'))),
-    el('h3', { class: 'secret-h' }, 'Private — anyone with these can spend everything above'),
-    el('div', { class: 'items' }, ...w.keys.map((k) => itemNode(k, 'secret'))),
-    el('ul', { class: 'notes' }, ...w.notes.map((n) => el('li', {}, n))),
+    ...body,
   );
+}
+
+// All addresses and their QR codes first, then all private keys, so the public
+// half can be read or copied without the secrets beside it.
+function walletsNodes(wallets, createdAt) {
+  return [
+    el('section', { class: 'half half-public' },
+      el('h2', { class: 'half-h public-h' }, 'Public addresses — share these to receive funds'),
+      ...wallets.map((w) => walletNode(w, createdAt,
+        el('div', { class: 'items' }, ...w.addresses.map((a) => itemNode(a, 'public'))),
+        el('ul', { class: 'notes' }, ...w.notes.map((n) => el('li', {}, n))),
+      )),
+    ),
+    el('section', { class: 'half half-secret' },
+      el('h2', { class: 'half-h secret-h' }, 'Private keys — anyone with these can spend everything above'),
+      ...wallets.map((w) => walletNode(w, createdAt,
+        el('div', { class: 'items' }, ...w.keys.map((k) => itemNode(k, 'secret'))),
+      )),
+    ),
+  ];
 }
 
 function renderSelfTest() {
@@ -118,7 +136,7 @@ function generate() {
     return;
   }
   const createdAt = new Date().toISOString().slice(0, 10);
-  out.replaceChildren(...generateWallets(randomBytes, ids).map((w) => walletNode(w, createdAt)));
+  out.replaceChildren(...walletsNodes(generateWallets(randomBytes, ids), createdAt));
   $('#print').disabled = false;
   $('#clear').disabled = false;
 }

@@ -19,6 +19,7 @@ Only public addresses get QR codes. Every private key and seed is shown in full 
 Nothing is blurred or hidden on screen.
 This is on purpose: the keys are meant to be typed by hand into offline software to build and sign transaction blobs, which then move without cameras.
 A QR code on a secret wouldn't help that workflow, and it's one more way to leak it.
+The page lists every address and its QR code first, then every private key below a dashed line. Each half repeats the group titles, so you can match keys to addresses.
 Every generated wallet prints on a single A4 or Letter page. The e2e test prints to PDF at both sizes and checks for exactly one page.
 
 ## Develop

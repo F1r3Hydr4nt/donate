@@ -62,7 +62,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .wallet h2 { margin: 0; font-size: 22px; }
 .scheme { color: var(--muted); font-size: 12px; }
 .meta { text-align: right; font-size: 13px; color: var(--muted); }
-.wallet h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; margin: 16px 0 8px; }
+.half-h { font-size: 15px; text-transform: uppercase; letter-spacing: .06em; margin: 8px 0 12px; }
+.half-secret { border-top: 2px dashed var(--secret); padding-top: 16px; margin-top: 32px; }
+.wallet-head + .items { margin-top: 10px; }
 .public-h { color: var(--public); }
 .secret-h { color: var(--secret); }
 
@@ -99,21 +101,26 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .meta { text-align: left; }
 }
 
-/* Every wallet on one sheet (A4 or Letter): wallets flow through two columns,
-   and no item is ever split across a column. */
+/* Every wallet on one sheet (A4 or Letter): addresses on top, keys below, each
+   half flowing through two columns; no item is ever split across a column. */
 @media print {
   :root { --bg: #fff; --paper: #fff; --ink: #000; --muted: #333; --line: #999; --secret: #000; --public: #000; --chip-bg: #eee; }
   @page { margin: 7mm; }
   body { font-size: 7pt; line-height: 1.18; }
   main { max-width: none; padding: 0; }
   .no-print { display: none !important; }
-  #wallets { columns: 2; column-gap: 5mm; }
+  .half { columns: 2; column-gap: 5mm; }
+  .half-h { column-span: all; font-size: 7pt; margin: 0 0 .6mm; }
+  .half-secret { border-top-width: 1pt; border-top-color: #000; padding-top: 1mm; margin-top: .5mm; }
+  .wallet-head + .items { margin-top: .4mm; }
+  /* The private half only needs the group title to match keys to addresses above. */
+  .half-secret .scheme, .half-secret .meta { display: none; }
+  .half-secret .wallet h2 { font-size: 8pt; }
   .wallet { border: 0; border-radius: 0; padding: 0; margin: 0 0 1.5mm; }
   .meta { white-space: nowrap; }
   .wallet-head { flex-wrap: nowrap; padding-bottom: .5mm; border-bottom-width: 1pt; break-after: avoid; }
   .wallet h2 { font-size: 9.5pt; }
   .scheme, .meta { font-size: 6pt; }
-  .wallet h3 { font-size: 6pt; margin: 1mm 0 .6mm; break-after: avoid; }
   .items { gap: .8mm; }
   .item { border-color: #000; border-radius: 1mm; padding: .6mm 1.2mm; gap: 1.8mm; break-inside: avoid; }
   .item.public { padding: 0 1.2mm 0 0; }

@@ -142,7 +142,8 @@ test('page loads from file:// in a real browser, self-test passes, and generates
   assert.match(dumpDom(join(alone, 'index.html')), /Self-test passed: 18 known-answer checks/);
 
   const dom = dumpDom(harness(unzipped(), 'harness'));
-  assert.equal((dom.match(/<section class="wallet">/g) || []).length, 6);
+  // Each group appears twice: once in the public half, once in the private half.
+  assert.equal((dom.match(/<section class="wallet" data-group="[a-z0-9]+">/g) || []).length, 12);
   for (const s of ['BTC', 'ETH', 'USDT', 'BNB', 'XRP', 'USDC', 'SOL', 'TRX', 'ZEC', 'HYPE',
     'DOGE', 'LINK', 'XMR', 'ADA', 'LEO', 'XLM', 'BCH']) assert.match(dom, new RegExp(`<span class="chip"[^>]*>${s}</span>`));
   const wordLists = [...dom.matchAll(/<ol class="words[^"]*">([\s\S]*?)<\/ol>/g)]
@@ -179,10 +180,32 @@ test('only public addresses get QR codes; secrets are plain, unhidden text for t
   assert.equal(secrets.filter((s) => new RegExp(`^${B58}{86,88}$`).test(s)).length, 1); // Solana 64-byte
 });
 
+test('all addresses and QR codes come first, then all private keys', e2e, () => {
+  const dom = dumpDom(harness(unzipped(), 'harness'));
+  const pubAt = dom.indexOf('<section class="half half-public">');
+  const secAt = dom.indexOf('<section class="half half-secret">');
+  assert.ok(pubAt >= 0 && secAt > pubAt, 'public half must come before the private half');
+  const pub = dom.slice(pubAt, secAt);
+  const sec = dom.slice(secAt);
+  const groups = (html) => [...html.matchAll(/data-group="([a-z0-9]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(groups(pub), ['bitcoin', 'evm', 'ed25519', 'xrp', 'cardano', 'monero']);
+  assert.deepEqual(groups(sec), groups(pub));
+  assert.equal((pub.match(/<div class="item public">/g) || []).length, 12);
+  assert.equal((pub.match(/<svg /g) || []).length, 12);
+  assert.doesNotMatch(pub, /class="item secret"|class="words/);
+  assert.equal((sec.match(/<div class="item secret">/g) || []).length, 11);
+  assert.doesNotMatch(sec, /class="item public"|<svg /);
+});
+
 // Reads the page the way a person would: each wallet's printed secrets and
 // addresses, with chunked secrets joined and word lists joined by spaces.
+// A group's addresses and keys sit in different halves, so they are joined by group id.
 function printedWallets(dom) {
-  return [...dom.matchAll(/<section class="wallet">([\s\S]*?)<\/section>/g)].map(([, s]) => {
+  const byGroup = new Map();
+  for (const [, id, s] of dom.matchAll(/<section class="wallet" data-group="([a-z0-9]+)">([\s\S]*?)<\/section>/g)) {
+    byGroup.set(id, (byGroup.get(id) ?? '') + s);
+  }
+  return [...byGroup.values()].map((s) => {
     const items = [...s.matchAll(/<div class="item (public|secret)">([\s\S]*?)<\/div><\/div>/g)].map(([, kind, body]) => {
       const words = body.match(/<ol class="words[^"]*">([\s\S]*?)<\/ol>/);
       return {
