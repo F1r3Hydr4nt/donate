@@ -2,9 +2,6 @@
 
 This single page makes printable paper wallets (keys, addresses and QR codes) for the CoinMarketCap top 17.
 
-| Chain | Address | Source | Checksum |
-|---|---|---|---|
-
 | Chain | Ticker | Address|
 |---|---|---|
 | Bitcoin — Satoshi's Vision | BSV | `1QHTNWbDZX3GijaLdBhLyNCZEPnd6rpPWX` |
