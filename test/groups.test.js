@@ -66,3 +66,24 @@ test('rejects rng output of the wrong length or type', () => {
   assert.throws(() => generateWallets(() => new Uint8Array(8), ['xrp']));
   assert.throws(() => generateWallets(() => 'nope', ['xrp']));
 });
+
+test('raw entropy is wiped once the keys are derived', () => {
+  const drawn = [];
+  const wallets = generateWallets((n) => {
+    const b = new Uint8Array(n).fill(drawn.length + 1);
+    drawn.push(b);
+    return b;
+  });
+  assert.equal(wallets.length, GROUPS.length);
+  for (const b of drawn) assert.ok(b.every((x) => x === 0), 'entropy buffer still holds key material');
+});
+
+test('Monero redraws entropy that would give a biased spend key', () => {
+  // 0xff..ff is above 15·ℓ, the largest multiple of ℓ below 2^256, so reducing it mod ℓ
+  // would favour small scalars. It must be rejected, not reduced.
+  const seq = [new Uint8Array(32).fill(0xff), new Uint8Array(32).fill(5)];
+  const sizes = [];
+  const [xmr] = generateWallets((n) => { sizes.push(n); return seq.shift(); }, ['monero']);
+  assert.deepEqual(sizes, [32, 32]);
+  assert.equal(xmr.keys.find((k) => /spend/.test(k.label)).value, '05'.repeat(32));
+});

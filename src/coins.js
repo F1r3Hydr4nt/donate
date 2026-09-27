@@ -184,6 +184,14 @@ export function cardanoWallet(entropy) {
 // ---------------------------------------------------------------- Monero
 
 const XMR_L = 2n ** 252n + 27742317777372353535851937790883648493n;
+// Largest multiple of ℓ that fits in 32 bytes. Entropy at or above it would make
+// 'mod ℓ' favour small scalars, so it is redrawn instead of reduced.
+const XMR_UNBIASED_LIMIT = (2n ** 256n / XMR_L) * XMR_L;
+
+export function isUnbiasedMoneroEntropy(bytes) {
+  const n = leToBig(bytes);
+  return n < XMR_UNBIASED_LIMIT && n % XMR_L !== 0n;
+}
 
 function crc32(bytes) {
   let crc = 0xffffffff;

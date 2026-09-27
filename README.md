@@ -25,7 +25,7 @@ Every generated wallet prints on a single A4 or Letter page. The e2e test prints
 ## Develop
 
 ```
-npm install
+npm ci
 npm test        # node:test, cross-checked against reference libraries + headless Chrome e2e
 npm run build   # -> dist/paper-wallet/ and dist/paper-wallet.zip (+ .sha256)
 ```
@@ -33,5 +33,12 @@ npm run build   # -> dist/paper-wallet/ and dist/paper-wallet.zip (+ .sha256)
 These runtime dependencies are bundled into the inline script in `index.html`: `@noble/curves`, `@noble/hashes`, `@scure/base`, `@scure/bip39`, `@paulmillr/qr`.
 The other dev dependencies (bitcoinjs-lib, ethers, tronweb, @solana/web3.js, stellar-base, ripple-keypairs,
 cardano-serialization-lib, monero-ts, jsqr) are only used by the tests, as independent sources of truth. They are never shipped.
+`package.json` overrides pin patched versions of three of their transitive dependencies (`serialize-javascript`, `uuid`, `stream-json`), so `npm audit` is clean.
+
+The build is reproducible. The zip is written by `scripts/build.mjs` itself, with a fixed entry order and one timestamp (`SOURCE_DATE_EPOCH` if set, else the last commit's time).
+Building the same commit gives the same `paper-wallet.zip` SHA-256, so anyone can rebuild it and check it matches.
+The page's Content-Security-Policy admits only its own inline script and stylesheet, each by SHA-256 hash. It allows no network access.
 
 When the page loads it runs 18 known-answer checks plus an RNG sanity check. Generation stays disabled unless they all pass.
+Each group's raw entropy is zeroed once its keys are derived. Monero entropy of 15·ℓ or more is redrawn rather than reduced, so the spend key is uniform mod ℓ.
+The keys themselves are JavaScript strings, which can't be wiped, so close the browser when done.

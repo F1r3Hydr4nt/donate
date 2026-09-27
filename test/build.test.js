@@ -70,6 +70,20 @@ test('CSP allows only the inline script, by hash', () => {
   assert.match(csp, /connect-src 'none'/);
 });
 
+test('CSP allows only the inline stylesheet, by hash', () => {
+  const csp = pageHtml().match(/http-equiv="Content-Security-Policy"\s+content="([^"]+)"/)[1];
+  const styleSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('style-src '));
+  const hash = createHash('sha256').update(inlineStyle(), 'utf8').digest('base64');
+  assert.equal(styleSrc, `style-src 'sha256-${hash}'`);
+});
+
+test('the build is reproducible: building again gives a byte-identical zip', async () => {
+  // Zip timestamps have 2-second resolution; wait past that so file times would differ.
+  await new Promise((r) => setTimeout(r, 2100));
+  const again = await build({ outDir: mkdtempSync(join(tmpdir(), 'pw-build-')) });
+  assert.equal(again.zipHash, out.zipHash);
+});
+
 test('inline script is a self-contained classic script with no network access', () => {
   const js = inlineScript();
   assert.doesNotMatch(js, /^\s*(import|export)\s/m);

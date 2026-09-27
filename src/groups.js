@@ -1,7 +1,7 @@
 // Groups coins that can share one key-derivation scheme, and turns raw
 // derivations into a display model (labelled keys + addresses + notes).
 import { secp256k1 } from '@noble/curves/secp256k1.js';
-import { bitcoinFamily, evmTron, ed25519Group, xrpWallet, cardanoWallet, moneroWallet } from './coins.js';
+import { bitcoinFamily, evmTron, ed25519Group, xrpWallet, cardanoWallet, moneroWallet, isUnbiasedMoneroEntropy } from './coins.js';
 
 // CoinMarketCap top 17 by market cap (Sept 2026), in rank order.
 export const COIN_LIST = [
@@ -24,7 +24,8 @@ export const COIN_LIST = [
   { symbol: 'BCH', name: 'Bitcoin Cash' },
 ];
 
-const MAX_SECP_ATTEMPTS = 16;
+const MAX_DRAW_ATTEMPTS = 16;
+const isSecpKey = (k) => secp256k1.utils.isValidSecretKey(k);
 
 export const GROUPS = [
   {
@@ -33,7 +34,7 @@ export const GROUPS = [
     scheme: 'secp256k1 · HASH160 · Base58Check / Bech32 / CashAddr',
     symbols: ['BTC', 'BCH', 'DOGE', 'ZEC'],
     entropyBytes: 32,
-    secp256k1: true,
+    isValid: isSecpKey,
     build(key) {
       const w = bitcoinFamily(key);
       return {
@@ -63,7 +64,7 @@ export const GROUPS = [
     scheme: 'secp256k1 · Keccak-256 · EIP-55 hex / Base58Check',
     symbols: ['ETH', 'USDT', 'USDC', 'BNB', 'LINK', 'LEO', 'HYPE', 'TRX'],
     entropyBytes: 32,
-    secp256k1: true,
+    isValid: isSecpKey,
     build(key) {
       const w = evmTron(key);
       return {
@@ -144,6 +145,7 @@ export const GROUPS = [
     scheme: 'ed25519 scalars mod ℓ · Keccak-256 · Monero Base58',
     symbols: ['XMR'],
     entropyBytes: 32,
+    isValid: isUnbiasedMoneroEntropy,
     build(bytes) {
       const w = moneroWallet(bytes);
       return {
@@ -165,19 +167,27 @@ function draw(randomBytes, n) {
   return b;
 }
 
+// Groups with an isValid check redraw until it passes; rejected draws are wiped too.
 function drawKey(group, randomBytes) {
-  if (!group.secp256k1) return draw(randomBytes, group.entropyBytes);
-  for (let i = 0; i < MAX_SECP_ATTEMPTS; i++) {
+  for (let i = 0; i < MAX_DRAW_ATTEMPTS; i++) {
     const k = draw(randomBytes, group.entropyBytes);
-    if (secp256k1.utils.isValidSecretKey(k)) return k;
+    if (!group.isValid || group.isValid(k)) return k;
+    k.fill(0);
   }
-  throw new Error('random source keeps producing invalid secp256k1 keys');
+  throw new Error(`random source keeps producing invalid ${group.title} keys`);
 }
 
 // randomBytes(n) -> Uint8Array; in the browser this is crypto.getRandomValues.
+// The raw entropy is zeroed once the printable strings exist. JS strings can't be
+// wiped, so closing the browser is still what clears the keys from memory.
 export function generateWallets(randomBytes, ids = GROUPS.map((g) => g.id)) {
   return GROUPS.filter((g) => ids.includes(g.id)).map((g) => {
-    const { keys, addresses, notes } = g.build(drawKey(g, randomBytes));
-    return { id: g.id, title: g.title, scheme: g.scheme, symbols: g.symbols, keys, addresses, notes };
+    const entropy = drawKey(g, randomBytes);
+    try {
+      const { keys, addresses, notes } = g.build(entropy);
+      return { id: g.id, title: g.title, scheme: g.scheme, symbols: g.symbols, keys, addresses, notes };
+    } finally {
+      entropy.fill(0);
+    }
   });
 }
