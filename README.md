@@ -1,6 +1,25 @@
 # Offline paper wallet generator
 
 This single page makes printable paper wallets (keys, addresses and QR codes) for the CoinMarketCap top 17.
+
+| Chain | Address | Source | Checksum |
+|---|---|---|---|
+
+| Chain | Ticker | Address|
+|---|---|---|
+| Bitcoin — Satoshi's Vision | BSV | `1QHTNWbDZX3GijaLdBhLyNCZEPnd6rpPWX` |
+| Bitcoin SegWit | BTC | `bc1qlancljl8q4tuc0s8fncs5syz50830e7z9durnr` |
+| Bitcoin Cash | BCH | `bitcoincash:qrlk0r7tuuz40np7qax0zzjqs23u79l8cgh2uzr7dz` |
+| Dogecoin | DOGE | `DURYumXrrvwZFjkwMmguX8NA7XWvTSsoFd` |
+| Zcash (transparent) | ZEC | `t1hA4Nr1MXqpsKNdEZcWU7BJUV3yhu75XNj` |
+| EVM (Ethereum / BNB Smart Chain / HyperEVM) | ETH, USDT, USDC, BNB, LINK, LEO, HYPE | `0x63912d48e283636cAbbc5eb9B0227eC81274CAFa` |
+| TRON | TRX, USDT (TRC-20) | `TK3fp7ms7TXdRTw7TBrUjDSmcfuSoUjREd` |
+| XRP Ledger | XRP | `rNtAZxP2xhSMr7UXXAqc6wr6UzvxPTFGz3` |
+| Cardano | ADA | `addr1q9a6s8z2kzp7rnpfzr4yzzln39nmrtk75u9ffv86wmlmc2mcu5lfh0yw79rg59z2w2ph2nmxrvf7gcc3e3hkunujtpmsvlwksg` |
+| Solana | SOL | `5a7aJqji9gT1VCtreR8A4jcHy5NUnjoYhb5QuKU4BWHK` |
+| Stellar | XLM | `GBB6UWITRDZH3NGHA3S2WNXEEMMSWZ36V53JI5TLYL6PMDUOQ5PONXS7` |
+| Monero | XMR | `4AiLqDLZWPo8C6hUpyMCLAiyuCZteKU3L26usTg55hgtf7D7MMT5hd6hQrRVKRAzNo7LETvW3RAttSgj46bz9UBT71dFPnC` |
+
 The output is `dist/paper-wallet.zip`: unzip it on an offline computer and open `index.html`. You don't need a server or network.
 The page is one self-contained file (script and styles inline), so it works however it is opened, including through the Tails file picker, which exposes only the file you pick.
 
