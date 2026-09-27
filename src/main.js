@@ -32,16 +32,25 @@ function coinName(symbol) {
   return COIN_LIST.find((c) => c.symbol === symbol)?.name ?? symbol;
 }
 
+// Secrets are typed by hand into offline signing software, so they are shown as
+// plain text in 4-character chunks for easier reading. The chunks are separate
+// spans with no whitespace between them, so copying still gives the exact string.
+function chunkedNode(value) {
+  return el('div', { class: 'value secret-value' }, ...(value.match(/.{1,4}/g) ?? []).map((c) => el('span', {}, c)));
+}
+
+// Only public addresses get a QR code. Private keys never do: they are typed,
+// not scanned, and a camera-readable secret on paper is one more way to leak it.
 function itemNode(item, kind) {
   const isSecret = kind === 'secret';
   return el('div', { class: `item ${kind}` },
-    qrNode(item.value),
+    isSecret ? null : qrNode(item.value),
     el('div', { class: 'item-text' },
       el('div', { class: 'item-label' }, item.label),
       item.symbols ? el('div', { class: 'chips' }, ...item.symbols.map((s) => el('span', { class: 'chip', title: coinName(s) }, s))) : null,
       item.mnemonic
-        ? el('ol', { class: 'words blurrable' }, ...item.value.split(' ').map((w) => el('li', {}, w)))
-        : el('div', { class: `value${isSecret ? ' blurrable' : ''}` }, item.value),
+        ? el('ol', { class: 'words' }, ...item.value.split(' ').map((w) => el('li', {}, w)))
+        : isSecret ? chunkedNode(item.value) : el('div', { class: 'value' }, item.value),
       item.hint ? el('div', { class: 'hint' }, item.hint) : null,
     ),
   );
@@ -130,10 +139,6 @@ function init() {
   $('#generate').addEventListener('click', generate);
   $('#print').addEventListener('click', () => window.print());
   $('#clear').addEventListener('click', clearWallets);
-  const blur = $('#blur');
-  const applyBlur = () => document.body.classList.toggle('blur-secrets', blur.checked);
-  blur.addEventListener('change', applyBlur);
-  applyBlur();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

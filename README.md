@@ -14,6 +14,12 @@ The output is `dist/paper-wallet.zip`: unzip it on an offline computer and open 
 
 Each group gets its own fresh key from `crypto.getRandomValues`.
 
+Only public addresses get QR codes. Every private key and seed is shown in full as plain text, split visually into 4-character chunks; copying still gives the unbroken string.
+Nothing is blurred or hidden on screen.
+This is on purpose: the keys are meant to be typed by hand into offline software to build and sign transaction blobs, which then move without cameras.
+A QR code on a secret wouldn't help that workflow, and it's one more way to leak it.
+Every generated wallet prints on a single A4 or Letter page. The e2e test prints to PDF at both sizes and checks for exactly one page.
+
 ## Develop
 
 ```

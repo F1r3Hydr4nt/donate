@@ -26,7 +26,8 @@
         <li>Check the zip's SHA-256 against <code>SHA256SUMS.txt</code> before copying it to the offline computer.</li>
         <li>Unzip on a computer that is disconnected from every network. A freshly booted live USB (e.g. Tails) is best.</li>
         <li>Open <code>index.html</code> directly from disk. The self-test must pass.</li>
-        <li>Print with a USB printer. Network printers and "print to PDF" can keep copies of the page.</li>
+        <li>Private keys are shown in full, as plain text, so they can be typed into offline signing software. Make sure no person or camera can see the screen.</li>
+        <li>Everything fits on one page. Print with a USB printer. Network printers and "print to PDF" can keep copies of the page.</li>
         <li>Close the browser when done. Don't save the page or take screenshots.</li>
         <li>Before storing real value, send a small amount, restore the wallet from the printed key, and spend it back.</li>
         <li>Anyone who sees a private key or recovery phrase can take the funds. Store the paper like cash: laminated, hidden, and with a second copy somewhere safe.</li>
@@ -42,7 +43,6 @@
         <button id="generate" type="button" disabled>Generate new wallets</button>
         <button id="print" type="button" disabled>Print</button>
         <button id="clear" type="button" disabled>Clear</button>
-        <label class="toggle"><input id="blur" type="checkbox" checked> Blur private keys on screen (they print unblurred)</label>
       </div>
     </section>
 

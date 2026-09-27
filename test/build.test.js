@@ -48,39 +48,91 @@ const CHROME = [process.env.CHROME_PATH,
   '/usr/bin/google-chrome', '/usr/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
 ].find((p) => p && existsSync(p));
 
-function dumpDom(file) {
+function chrome(file, ...args) {
   const profile = mkdtempSync(join(tmpdir(), 'pw-chrome-'));
   return execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-    `--user-data-dir=${profile}`, '--virtual-time-budget=15000', '--dump-dom', pathToFileURL(file).href],
+    `--user-data-dir=${profile}`, '--virtual-time-budget=15000', ...args, pathToFileURL(file).href],
   { encoding: 'utf8', timeout: 90000, stdio: ['ignore', 'pipe', 'ignore'] });
 }
+const dumpDom = (file) => chrome(file, '--dump-dom');
 
-test('page loads from file:// in a real browser, self-test passes, and generates all wallets',
-  { skip: !CHROME && 'no Chrome/Edge found (set CHROME_PATH)' }, () => {
-    // Unzip the actual artifact so the zip itself is what gets tested.
-    const dir = mkdtempSync(join(tmpdir(), 'pw-e2e-'));
-    const tar = process.platform === 'win32' ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'unzip';
-    execFileSync(tar, process.platform === 'win32' ? ['-x', '-f', out.zipPath, '-C', dir] : [out.zipPath, '-d', dir]);
-    const app = join(dir, 'paper-wallet');
+// Test-only harness: the unzipped files plus a script that clicks Generate and,
+// optionally, a stylesheet that fixes the paper size.
+function harness(app, name, pageSize) {
+  const dir = join(app, '..', name);
+  cpSync(app, dir, { recursive: true });
+  writeFileSync(join(dir, 'click.js'),
+    "document.addEventListener('DOMContentLoaded', () => document.getElementById('generate').click());");
+  let html = readFileSync(join(app, 'index.html'), 'utf8').replace('</body>', '<script src="click.js"></script></body>');
+  if (pageSize) {
+    writeFileSync(join(dir, 'paper.css'), `@page { size: ${pageSize}; }`);
+    html = html.replace('</head>', '<link rel="stylesheet" href="paper.css"></head>');
+  }
+  writeFileSync(join(dir, 'index.html'), html);
+  return join(dir, 'index.html');
+}
 
-    const plain = dumpDom(join(app, 'index.html'));
-    assert.match(plain, /Self-test passed: 18 known-answer checks/);
+const e2e = { skip: !CHROME && 'no Chrome/Edge found (set CHROME_PATH)' };
+let app;
+function unzipped() {
+  if (app) return app;
+  // Unzip the actual artifact so the zip itself is what gets tested.
+  const dir = mkdtempSync(join(tmpdir(), 'pw-e2e-'));
+  const tar = process.platform === 'win32' ? join(process.env.SystemRoot || 'C:\Windows', 'System32', 'tar.exe') : 'unzip';
+  execFileSync(tar, process.platform === 'win32' ? ['-x', '-f', out.zipPath, '-C', dir] : [out.zipPath, '-d', dir]);
+  return (app = join(dir, 'paper-wallet'));
+}
 
-    // Test-only harness page: same files plus a script that clicks Generate.
-    cpSync(app, join(dir, 'harness'), { recursive: true });
-    writeFileSync(join(dir, 'harness', 'click.js'),
-      "document.addEventListener('DOMContentLoaded', () => document.getElementById('generate').click());");
-    const html = readFileSync(join(app, 'index.html'), 'utf8').replace('</body>', '<script src="click.js"></script></body>');
-    writeFileSync(join(dir, 'harness', 'index.html'), html);
-    const dom = dumpDom(join(dir, 'harness', 'index.html'));
+const textOf = (html) => html.replace(/<[^>]+>/g, '');
 
-    assert.equal((dom.match(/<section class="wallet">/g) || []).length, 6);
-    assert.equal((dom.match(/<svg /g) || []).length, 23); // 12 addresses + 11 secrets
-    for (const s of ['BTC', 'ETH', 'USDT', 'BNB', 'XRP', 'USDC', 'SOL', 'TRX', 'ZEC', 'HYPE',
-      'DOGE', 'LINK', 'XMR', 'ADA', 'LEO', 'XLM', 'BCH']) assert.match(dom, new RegExp(`<span class="chip"[^>]*>${s}</span>`));
-    const wordLists = [...dom.matchAll(/<ol class="words[^"]*">([\s\S]*?)<\/ol>/g)]
-      .map((m) => (m[1].match(/<li>[a-z]+<\/li>/g) || []).length);
-    assert.deepEqual(wordLists, [24, 25]); // Cardano, Monero
-    assert.match(dom, /bc1q[02-9ac-hj-np-z]{38}/);
-    assert.match(dom, /\b4[1-9A-HJ-NP-Za-km-z]{94}\b/); // Monero address
+test('page loads from file:// in a real browser, self-test passes, and generates all wallets', e2e, () => {
+  const plain = dumpDom(join(unzipped(), 'index.html'));
+  assert.match(plain, /Self-test passed: 18 known-answer checks/);
+
+  const dom = dumpDom(harness(unzipped(), 'harness'));
+  assert.equal((dom.match(/<section class="wallet">/g) || []).length, 6);
+  for (const s of ['BTC', 'ETH', 'USDT', 'BNB', 'XRP', 'USDC', 'SOL', 'TRX', 'ZEC', 'HYPE',
+    'DOGE', 'LINK', 'XMR', 'ADA', 'LEO', 'XLM', 'BCH']) assert.match(dom, new RegExp(`<span class="chip"[^>]*>${s}</span>`));
+  const wordLists = [...dom.matchAll(/<ol class="words[^"]*">([\s\S]*?)<\/ol>/g)]
+    .map((m) => (m[1].match(/<li>[a-z]+<\/li>/g) || []).length);
+  assert.deepEqual(wordLists, [24, 25]); // Cardano, Monero
+  assert.match(dom, /bc1q[02-9ac-hj-np-z]{38}/);
+  assert.match(dom, /\b4[1-9A-HJ-NP-Za-km-z]{94}\b/); // Monero address
+});
+
+test('only public addresses get QR codes; secrets are plain, unhidden text for typing', e2e, () => {
+  const dom = dumpDom(harness(unzipped(), 'harness'));
+  const items = [...dom.matchAll(/<div class="item (public|secret)">([\s\S]*?)<\/div><\/div>/g)];
+  const pub = items.filter((m) => m[1] === 'public');
+  const sec = items.filter((m) => m[1] === 'secret');
+  assert.equal(pub.length, 12);
+  assert.equal(sec.length, 11);
+  for (const m of pub) assert.match(m[2], /<svg /);
+  for (const m of sec) assert.doesNotMatch(m[2], /<svg |class="qr"/);
+  assert.equal((dom.match(/<svg /g) || []).length, 12);
+  // Nothing hides secrets on screen: no blur toggle, class or filter.
+  assert.doesNotMatch(dom, /blur/i);
+  assert.doesNotMatch(readFileSync(join(unzipped(), 'style.css'), 'utf8'), /blur|:hover/);
+
+  // Each secret reads back as one unbroken string (visual chunking must not add characters).
+  const secrets = sec.flatMap((m) => [...m[2].matchAll(/<div class="value[^"]*">([\s\S]*?)<\/div>/g)].map((v) => textOf(v[1])));
+  assert.equal(secrets.length, 9); // 11 secrets minus the two word lists
+  for (const s of secrets) assert.match(s, /^\S+$/);
+  const B58 = '[1-9A-HJ-NP-Za-km-z]';
+  assert.equal(secrets.filter((s) => /^[0-9a-f]{64}$/.test(s)).length, 4); // BTC hex, EVM hex, XMR spend + view
+  assert.equal(secrets.filter((s) => new RegExp(`^[KL]${B58}{51}$`).test(s)).length, 1); // BTC WIF
+  assert.equal(secrets.filter((s) => new RegExp(`^Q${B58}{51}$`).test(s)).length, 1); // DOGE WIF
+  assert.equal(secrets.filter((s) => /^S[A-Z2-7]{55}$/.test(s)).length, 1); // Stellar
+  assert.equal(secrets.filter((s) => /^sEd[1-9A-HJ-NP-Za-km-z]{26,}$/.test(s)).length, 1); // XRP
+  assert.equal(secrets.filter((s) => new RegExp(`^${B58}{86,88}$`).test(s)).length, 1); // Solana 64-byte
+});
+
+for (const [size, box] of [['A4', /\/MediaBox \[0 0 59[45][.\d]* 84[12][.\d]*\]/], ['letter', /\/MediaBox \[0 0 612 792\]/]]) {
+  test(`all wallets print on a single ${size} page`, e2e, () => {
+    const pdf = join(unzipped(), '..', `wallets-${size}.pdf`);
+    chrome(harness(unzipped(), `print-${size}`, size), '--no-pdf-header-footer', `--print-to-pdf=${pdf}`);
+    const raw = readFileSync(pdf, 'latin1');
+    assert.match(raw, box);
+    assert.equal((raw.match(/\/Type\s*\/Page\b/g) || []).length, 1);
   });
+}
