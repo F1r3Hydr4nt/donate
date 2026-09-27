@@ -2,6 +2,7 @@ import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -30,21 +31,47 @@ before(async () => {
 });
 
 test('bundle contains exactly the offline files', () => {
-  assert.deepEqual(readdirSync(out.appDir).sort(),
-    ['SHA256SUMS.txt', 'THIRD_PARTY_LICENSES.txt', 'app.js', 'index.html', 'style.css']);
+  assert.deepEqual(readdirSync(out.appDir).sort(), ['SHA256SUMS.txt', 'THIRD_PARTY_LICENSES.txt', 'index.html']);
   assert.ok(existsSync(out.zipPath));
 });
 
-test('index.html only references local files relative to itself', () => {
-  const html = readFileSync(join(out.appDir, 'index.html'), 'utf8');
-  const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(refs.sort(), ['app.js', 'style.css']);
-  for (const r of refs) assert.ok(existsSync(join(out.appDir, r)));
+const pageHtml = () => readFileSync(join(out.appDir, 'index.html'), 'utf8');
+// The one inline <script> and <style> in the built page.
+const inlineScript = () => {
+  const scripts = [...pageHtml().matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 1);
+  assert.equal(scripts[0][1], '');
+  return scripts[0][2];
+};
+const inlineStyle = () => {
+  const styles = [...pageHtml().matchAll(/<style>([\s\S]*?)<\/style>/g)];
+  assert.equal(styles.length, 1);
+  return styles[0][1];
+};
+
+// Tails opens files picked with Ctrl+O through a portal that exposes only that one
+// file, so the page must not load anything else from disk.
+test('index.html is self-contained: script and styles inline, nothing loaded from disk', () => {
+  const html = pageHtml();
+  assert.doesNotMatch(html, /<script\b[^>]*\bsrc=/i);
+  assert.doesNotMatch(html, /<link\b/i);
   assert.doesNotMatch(html, /type="module"/);
+  assert.match(inlineStyle(), /\.secret-value/);
+  // An early </script> or <!-- inside the script would end or garble it.
+  assert.doesNotMatch(inlineScript(), /<\/script|<!--/i);
 });
 
-test('app.js is a self-contained classic script with no network access', () => {
-  const js = readFileSync(join(out.appDir, 'app.js'), 'utf8');
+test('CSP allows only the inline script, by hash', () => {
+  const csp = pageHtml().match(/http-equiv="Content-Security-Policy"\s+content="([^"]+)"/)[1];
+  const scriptSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('script-src '));
+  const hash = createHash('sha256').update(inlineScript(), 'utf8').digest('base64');
+  assert.equal(scriptSrc, `script-src 'sha256-${hash}'`);
+  assert.match(csp, /default-src 'none'/);
+  assert.match(csp, /connect-src 'none'/);
+});
+
+test('inline script is a self-contained classic script with no network access', () => {
+  const js = inlineScript();
   assert.doesNotMatch(js, /^\s*(import|export)\s/m);
   assert.doesNotMatch(js, /\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource|importScripts/);
   const urls = [...js.matchAll(/https?:\/\/[^\s'"`)]+/g)].map((m) => m[0])
@@ -55,7 +82,7 @@ test('app.js is a self-contained classic script with no network access', () => {
 
 test('SHA256SUMS.txt lists every shipped file', () => {
   const sums = readFileSync(join(out.appDir, 'SHA256SUMS.txt'), 'utf8');
-  for (const f of ['app.js', 'index.html', 'style.css', 'THIRD_PARTY_LICENSES.txt']) assert.match(sums, new RegExp(`^[0-9a-f]{64}  ${f.replace('.', '\\.')}$`, 'm'));
+  for (const f of ['index.html', 'THIRD_PARTY_LICENSES.txt']) assert.match(sums, new RegExp(`^[0-9a-f]{64}  ${f.replace('.', '\\.')}$`, 'm'));
 });
 
 const CHROME = [process.env.CHROME_PATH,
@@ -70,7 +97,8 @@ function chrome(file, ...args) {
     `--user-data-dir=${profile}`, '--virtual-time-budget=15000', ...args, pathToFileURL(file).href],
   { encoding: 'utf8', timeout: 90000, stdio: ['ignore', 'pipe', 'ignore'] });
 }
-const dumpDom = (file) => chrome(file, '--dump-dom');
+// Rendered markup only: the inline script's source would otherwise match page patterns.
+const dumpDom = (file) => chrome(file, '--dump-dom').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '');
 
 // Test-only harness: the unzipped files plus a script that clicks Generate and,
 // optionally, a stylesheet that fixes the paper size.
@@ -79,7 +107,10 @@ function harness(app, name, pageSize) {
   cpSync(app, dir, { recursive: true });
   writeFileSync(join(dir, 'click.js'),
     "document.addEventListener('DOMContentLoaded', () => document.getElementById('generate').click());");
-  let html = readFileSync(join(app, 'index.html'), 'utf8').replace('</body>', '<script src="click.js"></script></body>');
+  // The shipped CSP only admits the inline script, so let the harness files in too.
+  let html = readFileSync(join(app, 'index.html'), 'utf8')
+    .replace("script-src ", "script-src 'self' ").replace("style-src ", "style-src 'self' ")
+    .replace('</body>', '<script src="click.js"></script></body>');
   if (pageSize) {
     writeFileSync(join(dir, 'paper.css'), `@page { size: ${pageSize}; }`);
     html = html.replace('</head>', '<link rel="stylesheet" href="paper.css"></head>');
@@ -105,6 +136,11 @@ test('page loads from file:// in a real browser, self-test passes, and generates
   const plain = dumpDom(join(unzipped(), 'index.html'));
   assert.match(plain, /Self-test passed: 18 known-answer checks/);
 
+  // Same page copied on its own, as the Tails file-picker portal serves it.
+  const alone = mkdtempSync(join(tmpdir(), 'pw-alone-'));
+  cpSync(join(unzipped(), 'index.html'), join(alone, 'index.html'));
+  assert.match(dumpDom(join(alone, 'index.html')), /Self-test passed: 18 known-answer checks/);
+
   const dom = dumpDom(harness(unzipped(), 'harness'));
   assert.equal((dom.match(/<section class="wallet">/g) || []).length, 6);
   for (const s of ['BTC', 'ETH', 'USDT', 'BNB', 'XRP', 'USDC', 'SOL', 'TRX', 'ZEC', 'HYPE',
@@ -128,7 +164,7 @@ test('only public addresses get QR codes; secrets are plain, unhidden text for t
   assert.equal((dom.match(/<svg /g) || []).length, 12);
   // Nothing hides secrets on screen: no blur toggle, class or filter.
   assert.doesNotMatch(dom, /blur/i);
-  assert.doesNotMatch(readFileSync(join(unzipped(), 'style.css'), 'utf8'), /blur|:hover/);
+  assert.doesNotMatch(inlineStyle(), /blur|:hover/);
 
   // Each secret reads back as one unbroken string (visual chunking must not add characters).
   const secrets = sec.flatMap((m) => [...m[2].matchAll(/<div class="value[^"]*">([\s\S]*?)<\/div>/g)].map((v) => textOf(v[1])));

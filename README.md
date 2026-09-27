@@ -2,6 +2,7 @@
 
 This single page makes printable paper wallets (keys, addresses and QR codes) for the CoinMarketCap top 17.
 The output is `dist/paper-wallet.zip`: unzip it on an offline computer and open `index.html`. You don't need a server or network.
+The page is one self-contained file (script and styles inline), so it works however it is opened, including through the Tails file picker, which exposes only the file you pick.
 
 | Group | Coins | Secret you print |
 |---|---|---|
@@ -28,7 +29,7 @@ npm test        # node:test, cross-checked against reference libraries + headles
 npm run build   # -> dist/paper-wallet/ and dist/paper-wallet.zip (+ .sha256)
 ```
 
-These runtime dependencies are bundled into `app.js`: `@noble/curves`, `@noble/hashes`, `@scure/base`, `@scure/bip39`, `@paulmillr/qr`.
+These runtime dependencies are bundled into the inline script in `index.html`: `@noble/curves`, `@noble/hashes`, `@scure/base`, `@scure/bip39`, `@paulmillr/qr`.
 The other dev dependencies (bitcoinjs-lib, ethers, tronweb, @solana/web3.js, stellar-base, ripple-keypairs,
 cardano-serialization-lib, monero-ts, jsqr) are only used by the tests, as independent sources of truth. They are never shipped.
 

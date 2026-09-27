@@ -1,8 +1,8 @@
-// Builds dist/paper-wallet/ (index.html + app.js + style.css + licences) and zips it.
+// Builds dist/paper-wallet/ (a single self-contained index.html + licences) and zips it.
 import { build as esbuild } from 'esbuild';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -19,12 +19,32 @@ function zip(dir, name, outFile) {
   }
 }
 
+// Everything goes inside index.html. Tails serves a file opened with Ctrl+O through
+// a portal that exposes only that one file, so sibling app.js/style.css can't load.
+// The CSP admits the inline script by its hash and nothing else.
+function inlinePage(js, css) {
+  if (/<\/script|<!--/i.test(js)) throw new Error('bundle contains </script or <!--, which would break the inline script');
+  if (/<\/style/i.test(css)) throw new Error('style.css contains </style');
+  const slots = {
+    APP_JS_SHA256: createHash('sha256').update(js, 'utf8').digest('base64'),
+    STYLE_CSS: css,
+    APP_JS: js,
+  };
+  let html = readFileSync(join(root, 'web', 'index.html'), 'utf8');
+  for (const [name, value] of Object.entries(slots)) {
+    const marker = `{{${name}}}`;
+    if (html.split(marker).length !== 2) throw new Error(`index.html must contain ${marker} exactly once`);
+    html = html.replace(marker, () => value);
+  }
+  return html;
+}
+
 export async function build({ outDir = join(root, 'dist') } = {}) {
   const appDir = join(outDir, 'paper-wallet');
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(appDir, { recursive: true });
 
-  await esbuild({
+  const { outputFiles } = await esbuild({
     absWorkingDir: root,
     entryPoints: ['src/main.js'],
     bundle: true,
@@ -34,11 +54,11 @@ export async function build({ outDir = join(root, 'dist') } = {}) {
     minify: false, // keep the bundle readable for anyone auditing it offline
     legalComments: 'inline',
     charset: 'utf8',
-    outfile: join(appDir, 'app.js'),
+    outfile: 'app.js',
+    write: false,
     logLevel: 'warning',
   });
-  copyFileSync(join(root, 'web', 'index.html'), join(appDir, 'index.html'));
-  copyFileSync(join(root, 'web', 'style.css'), join(appDir, 'style.css'));
+  writeFileSync(join(appDir, 'index.html'), inlinePage(outputFiles[0].text, readFileSync(join(root, 'web', 'style.css'), 'utf8')));
 
   const licences = RUNTIME_DEPS.map((dep) => {
     const dir = join(root, 'node_modules', dep);
