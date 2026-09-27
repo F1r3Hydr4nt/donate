@@ -74,23 +74,39 @@ function walletNode(w, createdAt, ...body) {
   );
 }
 
+// On paper each half is a row of columns, and every group has a fixed column:
+// three narrow ones for the addresses (each row is a QR code with short text
+// beside it), two wide ones for the keys. Browsers balance multi-column print
+// layouts differently, so the split is fixed here rather than left to CSS. With
+// all groups selected the columns come out roughly even; fewer groups only make
+// them shorter. Each column is a run of GROUPS in order, so the screen order holds.
+const COLUMNS = {
+  public: [['bitcoin'], ['evm', 'ed25519'], ['xrp', 'cardano', 'monero']],
+  secret: [['bitcoin', 'evm', 'ed25519'], ['xrp', 'cardano', 'monero']],
+};
+
+function halfNode(kind, heading, nodes) {
+  const cols = COLUMNS[kind];
+  const colOf = (n) => Math.max(0, cols.findIndex((ids) => ids.includes(n.dataset.group)));
+  return el('section', { class: `half half-${kind}` },
+    el('h2', { class: `half-h ${kind}-h` }, heading),
+    el('div', { class: 'cols' }, ...cols.map((_, i) => el('div', { class: 'col' }, ...nodes.filter((n) => colOf(n) === i)))),
+  );
+}
+
 // All addresses and their QR codes first, then all private keys, so the public
 // half can be read or copied without the secrets beside it.
 function walletsNodes(wallets, createdAt) {
   return [
-    el('section', { class: 'half half-public' },
-      el('h2', { class: 'half-h public-h' }, 'Public addresses — share these to receive funds'),
-      ...wallets.map((w) => walletNode(w, createdAt,
+    halfNode('public', 'Public addresses — share these to receive funds',
+      wallets.map((w) => walletNode(w, createdAt,
         el('div', { class: 'items' }, ...w.addresses.map((a) => itemNode(a, 'public'))),
         el('ul', { class: 'notes' }, ...w.notes.map((n) => el('li', {}, n))),
-      )),
-    ),
-    el('section', { class: 'half half-secret' },
-      el('h2', { class: 'half-h secret-h' }, 'Private keys — anyone with these can spend everything above'),
-      ...wallets.map((w) => walletNode(w, createdAt,
+      ))),
+    halfNode('secret', 'Private keys — anyone with these can spend everything above',
+      wallets.map((w) => walletNode(w, createdAt,
         el('div', { class: 'items' }, ...w.keys.map((k) => itemNode(k, 'secret'))),
-      )),
-    ),
+      ))),
   ];
 }
 

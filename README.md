@@ -20,7 +20,8 @@ Nothing is blurred or hidden on screen.
 This is on purpose: the keys are meant to be typed by hand into offline software to build and sign transaction blobs, which then move without cameras.
 A QR code on a secret wouldn't help that workflow, and it's one more way to leak it.
 The page lists every address and its QR code first, then every private key below a dashed line. Each half repeats the group titles, so you can match keys to addresses.
-Every generated wallet prints on a single A4 or Letter page. The e2e test prints to PDF at both sizes and checks for exactly one page.
+Every generated wallet prints on a single A4 or Letter page. On paper, the addresses sit in three fixed columns and the keys in two, and each group always goes in the same column.
+The e2e tests print to PDF at both sizes and check for exactly one page. They print once with the default fonts and once with Tor Browser's font widths (Arial/Courier New stand in for its bundled Arimo/Cousine), filling every recovery word with the longest word in the lists and requiring 10mm to spare. A separate check fails if anything is wider than its printed column.
 
 ## Develop
 

@@ -116,17 +116,17 @@ const dumpDom = (file) => chrome(file, '--dump-dom').replace(/<script\b[^>]*>[\s
 
 // Test-only harness: the unzipped files plus a script that clicks Generate and,
 // optionally, a stylesheet that fixes the paper size.
-function harness(app, name, pageSize) {
+function harness(app, name, pageSize, extraCss = '', afterClick = '') {
   const dir = join(app, '..', name);
   cpSync(app, dir, { recursive: true });
   writeFileSync(join(dir, 'click.js'),
-    "document.addEventListener('DOMContentLoaded', () => document.getElementById('generate').click());");
+    `document.addEventListener('DOMContentLoaded', () => { document.getElementById('generate').click(); ${afterClick} });`);
   // The shipped CSP only admits the inline script, so let the harness files in too.
   let html = readFileSync(join(app, 'index.html'), 'utf8')
     .replace("script-src ", "script-src 'self' ").replace("style-src ", "style-src 'self' ")
     .replace('</body>', '<script src="click.js"></script></body>');
   if (pageSize) {
-    writeFileSync(join(dir, 'paper.css'), `@page { size: ${pageSize}; }`);
+    writeFileSync(join(dir, 'paper.css'), `@page { size: ${pageSize}; }\n${extraCss}`);
     html = html.replace('</head>', '<link rel="stylesheet" href="paper.css"></head>');
   }
   writeFileSync(join(dir, 'index.html'), html);
@@ -281,12 +281,60 @@ test('every printed secret, re-imported with reference libs, gives the address p
   }
 });
 
+// Tor Browser only renders its bundled fonts: Arimo (Arial metrics) for sans and
+// Cousine (Courier New metrics), which is much wider than Consolas, for monospace.
+// Firefox lays out print differently from Chrome, so also demand 10mm to spare.
+const TOR_FONTS = `* { font-family: Arial !important; }
+  code, .value, .value *, .words, .words * { font-family: "Courier New" !important; }
+  @page { margin-bottom: 17mm; }`;
+// Worst case for the word grids: every word is the longest in either list (12 letters).
+// If anything is wider than its column the browser shrinks the whole page, which
+// also pushes items onto a second sheet.
+const LONGEST_WORDS = "document.querySelectorAll('.words li').forEach((li) => { li.textContent = 'verification'; });";
 for (const [size, box] of [['A4', /\/MediaBox \[0 0 59[45][.\d]* 84[12][.\d]*\]/], ['letter', /\/MediaBox \[0 0 612 792\]/]]) {
-  test(`all wallets print on a single ${size} page`, e2e, () => {
-    const pdf = join(unzipped(), '..', `wallets-${size}.pdf`);
-    chrome(harness(unzipped(), `print-${size}`, size), '--no-pdf-header-footer', `--print-to-pdf=${pdf}`);
-    const raw = readFileSync(pdf, 'latin1');
-    assert.match(raw, box);
-    assert.equal((raw.match(/\/Type\s*\/Page\b/g) || []).length, 1);
+  for (const [fonts, css, js] of [['default', '', ''], ['Tor Browser', TOR_FONTS, LONGEST_WORDS]]) {
+    test(`all wallets print on a single ${size} page with ${fonts} fonts`, e2e, () => {
+      const name = `print-${size}-${fonts.replace(' ', '')}`;
+      const pdf = join(unzipped(), '..', `${name}.pdf`);
+      chrome(harness(unzipped(), name, size, css, js), '--no-pdf-header-footer', `--print-to-pdf=${pdf}`);
+      const raw = readFileSync(pdf, 'latin1');
+      assert.match(raw, box);
+      assert.equal((raw.match(/\/Type\s*\/Page\b/g) || []).length, 1);
+    });
+  }
+}
+
+// Too-wide content spills into the next column (or makes the browser shrink the
+// page) without adding a page, so check widths directly: the print rules applied
+// on screen at the printable width, worst-case fonts and words.
+for (const [size, width] of [['A4', 196], ['letter', 201.9]]) {
+  test(`nothing is wider than its printed column on ${size}`, e2e, () => {
+    const dir = join(unzipped(), '..', `columns-${size}`);
+    cpSync(unzipped(), dir, { recursive: true });
+    writeFileSync(join(dir, 'paper.css'), `main { width: ${width}mm; margin: 0; } ${TOR_FONTS}`);
+    writeFileSync(join(dir, 'check.js'), `document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('generate').click();
+      ${LONGEST_WORDS}
+      const wide = [];
+      for (const col of document.querySelectorAll('.col')) {
+        const c = col.getBoundingClientRect();
+        for (const e of col.querySelectorAll('*')) {
+          const r = e.getBoundingClientRect();
+          if (r.width && (r.left < c.left - 0.5 || r.right > c.right + 0.5)) wide.push((e.className?.baseVal ?? e.className) || e.tagName);
+        }
+        if (col.scrollWidth > col.clientWidth) wide.push('col scrolls');
+      }
+      document.body.setAttribute('data-cols', document.querySelectorAll('.col').length);
+      document.body.setAttribute('data-too-wide', JSON.stringify(wide));
+    });`);
+    // The CSP pins the inline stylesheet's hash, so drop it to rewrite the print rules as screen rules.
+    writeFileSync(join(dir, 'index.html'), readFileSync(join(unzipped(), 'index.html'), 'utf8')
+      .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '')
+      .replace(/@media print/g, '@media all')
+      .replace('</head>', '<link rel="stylesheet" href="paper.css"></head>')
+      .replace('</body>', '<script src="check.js"></script></body>'));
+    const dom = dumpDom(join(dir, 'index.html'));
+    assert.equal(dom.match(/data-cols="(\d+)"/)?.[1], '5');
+    assert.deepEqual(JSON.parse(dom.match(/data-too-wide="([^"]*)"/)[1].replaceAll('&quot;', '"')), []);
   });
 }

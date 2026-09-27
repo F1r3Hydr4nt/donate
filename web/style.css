@@ -102,23 +102,27 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 }
 
 /* Every wallet on one sheet (A4 or Letter): addresses on top, keys below, each
-   half flowing through two columns; no item is ever split across a column. */
+   half in fixed columns (see COLUMNS in main.js). */
 @media print {
   :root { --bg: #fff; --paper: #fff; --ink: #000; --muted: #333; --line: #999; --secret: #000; --public: #000; --chip-bg: #eee; }
   @page { margin: 7mm; }
   body { font-size: 7pt; line-height: 1.18; }
   main { max-width: none; padding: 0; }
   .no-print { display: none !important; }
-  .half { columns: 2; column-gap: 5mm; }
-  .half-h { column-span: all; font-size: 7pt; margin: 0 0 .6mm; }
+  /* minmax(0, …): a column never grows to fit wide content, which would make the browser shrink the page. */
+  .cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); column-gap: 5mm; align-items: start; }
+  .half-public .cols { column-gap: 3.5mm; }
+  .col { min-width: 0; }
+  .half-h { font-size: 7pt; margin: 0 0 .6mm; }
   .half-secret { border-top-width: 1pt; border-top-color: #000; padding-top: 1mm; margin-top: .5mm; }
   .wallet-head + .items { margin-top: .4mm; }
   /* The private half only needs the group title to match keys to addresses above. */
   .half-secret .scheme, .half-secret .meta { display: none; }
   .half-secret .wallet h2 { font-size: 8pt; }
   .wallet { border: 0; border-radius: 0; padding: 0; margin: 0 0 1.5mm; }
-  .meta { white-space: nowrap; }
-  .wallet-head { flex-wrap: nowrap; padding-bottom: .5mm; border-bottom-width: 1pt; break-after: avoid; }
+  .meta { white-space: nowrap; margin-left: auto; }
+  /* In a narrow column the symbols and date drop below the title rather than squeezing it. */
+  .wallet-head { gap: 0 2mm; padding-bottom: .5mm; border-bottom-width: 1pt; break-after: avoid; }
   .wallet h2 { font-size: 9.5pt; }
   .scheme, .meta { font-size: 6pt; }
   .items { gap: .8mm; }
@@ -131,8 +135,13 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .chip { font-size: 5.5pt; padding: 0 2px; }
   .value { font-size: 7.5pt; margin: .3mm 0; }
   .secret-value { font-size: 9pt; font-weight: 700; line-height: 1.2; }
-  .words { grid-template-columns: repeat(5, 1fr); font-size: 7.5pt; font-weight: 700; margin: .5mm 0; gap: 0 2mm; }
-  .words li::before { font-size: 6pt; min-width: 1.8em; font-weight: 400; }
+  /* Four columns: the longest Monero words ("verification") need the room in a Courier-width font. */
+  .words { grid-template-columns: repeat(4, minmax(0, 1fr)); font-size: 7pt; font-weight: 700; margin: .5mm 0; gap: 0 1.5mm; }
+  .words li::before { font-size: 5.5pt; min-width: 1.7em; margin-right: .4mm; font-weight: 400; }
   .hint { font-size: 5.8pt; }
+  /* A secret's hint sits beside its label (dropping below only if it won't fit), saving a line per key. */
+  .item.secret .item-text { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 2mm; }
+  .item.secret .hint { order: 1; flex: 1 1 40mm; }
+  .item.secret .value, .item.secret .words { order: 2; flex: 0 0 100%; }
   .notes { margin: .8mm 0 0; padding-left: 3mm; font-size: 5.8pt; }
 }
